@@ -1,0 +1,53 @@
+name: Build English Iraq App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Extract project ZIP
+        run: |
+          mkdir -p app
+          unzip -q English_Iraq_PlayReady.zip -d app
+          echo "Project files:"
+          find app -maxdepth 3 -name pubspec.yaml -print
+
+      - name: Find Flutter project
+        id: project
+        run: |
+          PUBSPEC=$(find app -name pubspec.yaml -print -quit)
+          if [ -z "$PUBSPEC" ]; then
+            echo "pubspec.yaml not found"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$PUBSPEC")
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Flutter project: $PROJECT_DIR"
+
+      - name: Install dependencies
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: English-Iraq-APK
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-debug.apk
