@@ -23,41 +23,58 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Find project
+      - name: Extract Flutter project
+        run: |
+          mkdir -p app
+          unzip -q English_Iraq_PlayReady.zip -d app
+
+      - name: Find Flutter project
         id: project
         run: |
-          PROJECT=$(find . -name pubspec.yaml -not -path './.git/*' -print -quit | xargs dirname)
-          echo "dir=$PROJECT" >> "$GITHUB_OUTPUT"
-          echo "Project: $PROJECT"
+          PUBSPEC=$(find app -name pubspec.yaml -print -quit)
+          if [ -z "$PUBSPEC" ]; then
+            echo "ERROR: pubspec.yaml not found"
+            find app -maxdepth 4 -type f | head -100
+            exit 1
+          fi
 
-      - name: Recreate Android
+          PROJECT_DIR=$(dirname "$PUBSPEC")
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Flutter project: $PROJECT_DIR"
+
+      - name: Recreate Android platform
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
           rm -rf android
           flutter create --platforms=android --org com.englishiraq .
 
-      - name: Configure Android
+      - name: Set application ID
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          sed -i 's/com\.englishiraq\.english_iraq/com.englishiraq.app/g' android/settings.gradle
-          sed -i 's/com\.englishiraq\.english_iraq/com.englishiraq.app/g' android/app/build.gradle
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/g' android/app/build.gradle
-          sed -i 's/namespace = "com.englishiraq.app"/namespace = "com.englishiraq.app"/g' android/app/build.gradle
-          sed -i 's/applicationId = "com.englishiraq.app"/applicationId = "com.englishiraq.app"/g' android/app/build.gradle
+          sed -i 's/applicationId = "[^"]*"/applicationId = "com.englishiraq.app"/' android/app/build.gradle.kts || true
+          sed -i 's/applicationId "[^"]*"/applicationId "com.englishiraq.app"/' android/app/build.gradle || true
+          sed -i 's/namespace = "[^"]*"/namespace = "com.englishiraq.app"/' android/app/build.gradle.kts || true
+          sed -i 's/namespace "[^"]*"/namespace "com.englishiraq.app"/' android/app/build.gradle || true
 
-      - name: Install packages
+      - name: Set Android API 36
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/' android/app/build.gradle.kts || true
+          sed -i 's/targetSdk flutter.targetSdkVersion/targetSdk 36/' android/app/build.gradle || true
+
+      - name: Install dependencies
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter pub get
 
-      - name: Analyze
+      - name: Analyze project
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter analyze
 
-      - name: Build APK
+      - name: Build Release APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter build apk --release
 
-      - name: Build AAB
+      - name: Build Release AAB
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter build appbundle --release
 
