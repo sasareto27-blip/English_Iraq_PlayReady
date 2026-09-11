@@ -6,48 +6,69 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
-      - name: Extract project ZIP
-        run: |
-          mkdir -p app
-          unzip -q English_Iraq_PlayReady.zip -d app
-          echo "Project files:"
-          find app -maxdepth 3 -name pubspec.yaml -print
-
-      - name: Find Flutter project
+      - name: Find project
         id: project
         run: |
-          PUBSPEC=$(find app -name pubspec.yaml -print -quit)
-          if [ -z "$PUBSPEC" ]; then
-            echo "pubspec.yaml not found"
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$PUBSPEC")
-          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Flutter project: $PROJECT_DIR"
+          PROJECT=$(find . -name pubspec.yaml -not -path './.git/*' -print -quit | xargs dirname)
+          echo "dir=$PROJECT" >> "$GITHUB_OUTPUT"
+          echo "Project: $PROJECT"
 
-      - name: Install dependencies
+      - name: Recreate Android
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          rm -rf android
+          flutter create --platforms=android --org com.englishiraq .
+
+      - name: Configure Android
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          sed -i 's/com\.englishiraq\.english_iraq/com.englishiraq.app/g' android/settings.gradle
+          sed -i 's/com\.englishiraq\.english_iraq/com.englishiraq.app/g' android/app/build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/g' android/app/build.gradle
+          sed -i 's/namespace = "com.englishiraq.app"/namespace = "com.englishiraq.app"/g' android/app/build.gradle
+          sed -i 's/applicationId = "com.englishiraq.app"/applicationId = "com.englishiraq.app"/g' android/app/build.gradle
+
+      - name: Install packages
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter pub get
 
+      - name: Analyze
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: flutter analyze
+
       - name: Build APK
         working-directory: ${{ steps.project.outputs.dir }}
-        run: flutter build apk --debug
+        run: flutter build apk --release
+
+      - name: Build AAB
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: flutter build appbundle --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: English-Iraq-APK
-          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-debug.apk
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: English-Iraq-AAB
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/bundle/release/app-release.aab
